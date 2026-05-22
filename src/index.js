@@ -41,6 +41,45 @@ async function getGame(appId) {
   return res.data[appId].data;
 }
 
+async function updateGame(game, channel) {
+
+  const data = await getGame(game.appId);
+
+  const newReleaseDate =
+    data.release_date.date;
+
+  const isReleased =
+    !data.release_date.coming_soon;
+
+  // Changement de date
+  if (game?.releaseDate !== newReleaseDate) {
+
+    await channel.send(
+      `📅 Nouvelle date pour **${data.name}**\n` +
+      `Ancienne date : ${game?.releaseDate}\n` +
+      `Nouvelle date : ${newReleaseDate}`
+    );
+
+    game.releaseDate = newReleaseDate;
+  }
+
+  // Jeu sorti
+  if (isReleased && !game.released) {
+
+    await channel.send(
+      `🎮 **${data.name}** est maintenant disponible !\n` +
+      `https://store.steampowered.com/app/${game.appId}`
+    );
+
+    game.released = true;
+  }
+
+  // Mise à jour du nom
+  game.name = data.name;
+
+  return game;
+}
+
 client.once('clientReady', () => {
   console.log(`Bot connecté : ${client.user.tag}`);
 });
@@ -75,6 +114,7 @@ client.on('messageCreate', async (message) => {
     games.push({
       appId,
       name: data.name,
+      releaseDate: data.release_date.date,
       released: false
     });
 
@@ -93,7 +133,7 @@ client.on('messageCreate', async (message) => {
     }
 
     let txt = games
-      .map(g => `• ${g.name}`)
+      .map(g => `• ${g.name} — 📅 ${g?.releaseDate}`)
       .join('\n');
 
     message.reply(txt);
@@ -102,34 +142,25 @@ client.on('messageCreate', async (message) => {
 
 // Vérification toutes les heures
 cron.schedule('0 * * * *', async () => {
-
-  console.log('Check Steam...');
-
-  const channel =
-    await client.channels.fetch(process.env.CHANNEL_ID);
-
-  let games = loadGames();
-
-  for (let game of games) {
-
-    const data = await getGame(game.appId);
-
-    const released =
-      !data.release_date.coming_soon;
-
-    if (released && !game.released) {
-
-      game.released = true;
-
-      await channel.send(
-        `🎮 ${data.name} vient de sortir !\n` +
-        `https://store.steampowered.com/app/${game.appId}`
-      );
+  console.log('Steam update check...');
+  try {
+    const channel = await client.channels.fetch(process.env.CHANNEL_ID);
+    let games = loadGames();
+    for (let i = 0; i < games.length; i++) {
+      try {
+        games[i] = await updateGame(games[i], channel);
+      } catch (err) {
+        console.error(
+          `Erreur jeu ${games[i].appId}`,
+          err
+        );
+      }
     }
+    saveGames(games);
+    console.log('Games updated');
+  } catch (err) {
+    console.error('Erreur cron', err);
   }
-
-  saveGames(games);
-
 });
 
 client.login(process.env.TOKEN);
