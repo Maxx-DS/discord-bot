@@ -17,7 +17,7 @@ const client = new Client({
   ]
 });
 
-const FILE = './games.json';
+const FILE = './src/games.json';
 
 function loadGames() {
   return JSON.parse(fs.readFileSync(FILE));
@@ -41,7 +41,7 @@ async function getGame(appId) {
   return res.data[appId].data;
 }
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`Bot connecté : ${client.user.tag}`);
 });
 
