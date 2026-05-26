@@ -41,43 +41,61 @@ async function getGame(appId) {
   return res.data[appId].data;
 }
 
+function isEarlyAccess(data) {
+  return Array.isArray(data.genres) && data.genres.some(genre =>
+    genre.id === 70 || genre.id === '70' ||
+    String(genre.description).toLowerCase().includes('early access')
+  );
+}
+
 async function updateGame(game, channel) {
 
   const data = await getGame(game.appId);
 
-  const newReleaseDate =
-    data.release_date.date;
-
-  const isReleased =
-    !data.release_date.coming_soon;
+  const newReleaseDate = data.release_date.date;
+  const isReleased = !data.release_date.coming_soon;
+  const earlyAccess = isEarlyAccess(data);
+  let removeFromList = false;
 
   // Changement de date
   if (game?.releaseDate !== newReleaseDate) {
-
     await channel.send(
       `📅 Nouvelle date pour **${data.name}**\n` +
       `Ancienne date : ${game?.releaseDate}\n` +
       `Nouvelle date : ${newReleaseDate}`
     );
-
     game.releaseDate = newReleaseDate;
   }
 
   // Jeu sorti
   if (isReleased && !game.released) {
-
-    await channel.send(
-      `🎮 **${data.name}** est maintenant disponible !\n` +
-      `https://store.steampowered.com/app/${game.appId}`
-    );
-
-    game.released = true;
+    if (earlyAccess) {
+      await channel.send(
+        `🎮 **${data.name}** est maintenant disponible en Early Access !\n` +
+        `https://store.steampowered.com/app/${game.appId}`
+      );
+      game.released = true;
+    } else {
+      await channel.send(
+        `🎮 **${data.name}** est maintenant disponible !\n` +
+        `https://store.steampowered.com/app/${game.appId}`
+      );
+      removeFromList = true;
+    }
   }
 
-  // Mise à jour du nom
-  game.name = data.name;
+  // Si le jeu était en Early Access et passe en version finale, on le retire de la liste
+  if (game.released && !earlyAccess && isReleased) {
+    await channel.send(
+      `✅ **${data.name}** est sorti en V1 et ne sera plus suivi ici.`
+    );
+    removeFromList = true;
+  }
 
-  return game;
+  game.name = data.name;
+  game.earlyAccess = earlyAccess;
+
+  return { game, removeFromList };
 }
 
 client.once('clientReady', () => {
@@ -108,6 +126,8 @@ client.on('messageCreate', async (message) => {
     }
 
     const data = await getGame(appId);
+    const earlyAccess = isEarlyAccess(data);
+    const isReleased = !data.release_date.coming_soon;
 
     let games = loadGames();
 
@@ -115,7 +135,8 @@ client.on('messageCreate', async (message) => {
       appId,
       name: data.name,
       releaseDate: data.release_date.date,
-      released: false
+      released: isReleased,
+      earlyAccess
     });
 
     saveGames(games);
@@ -133,10 +154,23 @@ client.on('messageCreate', async (message) => {
     }
 
     let txt = games
-      .map(g => `• ${g.name} — 📅 ${g?.releaseDate}`)
+      .map(g => {
+        const status = g.earlyAccess
+          ? ' — 🟡 Early Access'
+          : g.released
+            ? ' — ✅ Sorti'
+            : '';
+        return `• ${g.name} — 📅 ${g?.releaseDate}${status}`;
+      })
       .join('\n');
 
     message.reply(txt);
+  }
+
+  // Affiche le JSON brut de games.json
+  if (message.content === '!listbrut') {
+    const games = loadGames();
+    return message.reply(`\`\`\`json\n${JSON.stringify(games, null, 2)}\n\`\`\``);
   }
 });
 
@@ -145,18 +179,25 @@ cron.schedule('0 * * * *', async () => {
   console.log('Steam update check...');
   try {
     const channel = await client.channels.fetch(process.env.CHANNEL_ID);
-    let games = loadGames();
+    const games = loadGames();
+    const updatedGames = [];
+
     for (let i = 0; i < games.length; i++) {
       try {
-        games[i] = await updateGame(games[i], channel);
+        const result = await updateGame(games[i], channel);
+        if (!result.removeFromList) {
+          updatedGames.push(result.game);
+        }
       } catch (err) {
         console.error(
           `Erreur jeu ${games[i].appId}`,
           err
         );
+        updatedGames.push(games[i]);
       }
     }
-    saveGames(games);
+
+    saveGames(updatedGames);
     console.log('Games updated');
   } catch (err) {
     console.error('Erreur cron', err);
