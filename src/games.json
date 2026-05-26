@@ -1,1 +1,30 @@
-[]
+[
+  {
+    "appId": "3517740",
+    "name": "Frostrail",
+    "releaseDate": "Q4 2026",
+    "released": false,
+    "earlyAccess": true
+  },
+  {
+    "appId": "4269150",
+    "name": "Campwood",
+    "releaseDate": "Coming soon",
+    "released": false,
+    "earlyAccess": false
+  },
+  {
+    "appId": "4174160",
+    "name": "Project: Doors",
+    "releaseDate": "To be announced",
+    "released": false,
+    "earlyAccess": false
+  },
+  {
+    "appId": "3314580",
+    "name": "Trash Day",
+    "releaseDate": "To be announced",
+    "released": false,
+    "earlyAccess": false
+  }
+]

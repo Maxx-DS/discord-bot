@@ -34,7 +34,7 @@ function getAppId(url) {
 
 async function getGame(appId) {
   const url =
-    `https://store.steampowered.com/api/appdetails?appids=${appId}`;
+    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=french`;
 
   const res = await axios.get(url);
 
@@ -44,7 +44,7 @@ async function getGame(appId) {
 function isEarlyAccess(data) {
   return Array.isArray(data.genres) && data.genres.some(genre =>
     genre.id === 70 || genre.id === '70' ||
-    String(genre.description).toLowerCase().includes('early access')
+    String(genre.description).toLowerCase().includes('accès anticipé')
   );
 }
 
