@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require('fs');
 const axios = require('axios');
 const cron = require('node-cron');
+const { shouldNotifyFinalRelease } = require('./gameState');
 
 const {
   Client,
@@ -96,7 +97,7 @@ async function updateGame(game, channel) {
   }
 
   // Si le jeu était en Early Access et passe en version finale, on le garde dans la liste
-  if (game.released && !earlyAccess && isReleased) {
+  if (shouldNotifyFinalRelease(game, earlyAccess, isReleased)) {
     await channel.send(
       `✅ **${data.name}** est sorti en version finale.`
     );
