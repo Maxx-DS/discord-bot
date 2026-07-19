@@ -19,8 +19,20 @@ const client = new Client({
 
 const FILE = './src/games.json';
 
+function normalizeGames(games) {
+  const normalizedGames = Array.isArray(games) ? games : [];
+  const maxId = normalizedGames.reduce((max, game) => Math.max(max, Number(game.id) || 0), 0);
+  let nextId = maxId + 1;
+
+  return normalizedGames.map((game) => ({
+    ...game,
+    id: game.id ?? nextId++
+  }));
+}
+
 function loadGames() {
-  return JSON.parse(fs.readFileSync(FILE));
+  const games = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  return normalizeGames(games);
 }
 
 function saveGames(games) {
@@ -55,7 +67,6 @@ async function updateGame(game, channel) {
   const newReleaseDate = data.release_date.date;
   const isReleased = !data.release_date.coming_soon;
   const earlyAccess = isEarlyAccess(data);
-  let removeFromList = false;
 
   // Changement de date
   if (game?.releaseDate !== newReleaseDate) {
@@ -80,22 +91,22 @@ async function updateGame(game, channel) {
         `🎮 **${data.name}** est maintenant disponible !\n` +
         `https://store.steampowered.com/app/${game.appId}`
       );
-      removeFromList = true;
+      game.released = true;
     }
   }
 
-  // Si le jeu était en Early Access et passe en version finale, on le retire de la liste
+  // Si le jeu était en Early Access et passe en version finale, on le garde dans la liste
   if (game.released && !earlyAccess && isReleased) {
     await channel.send(
-      `✅ **${data.name}** est sorti en V1 et ne sera plus suivi ici.`
+      `✅ **${data.name}** est sorti en version finale.`
     );
-    removeFromList = true;
+    game.earlyAccess = false;
   }
 
   game.name = data.name;
   game.earlyAccess = earlyAccess;
 
-  return { game, removeFromList };
+  return { game };
 }
 
 client.once('clientReady', () => {
@@ -130,8 +141,10 @@ client.on('messageCreate', async (message) => {
     const isReleased = !data.release_date.coming_soon;
 
     let games = loadGames();
+    const nextId = games.reduce((max, game) => Math.max(max, Number(game.id) || 0), 0) + 1;
 
     games.push({
+      id: nextId,
       appId,
       name: data.name,
       releaseDate: data.release_date.date,
@@ -144,6 +157,24 @@ client.on('messageCreate', async (message) => {
     message.reply(`✅ ${data.name} ajouté.`);
   }
 
+  if (message.content.startsWith('!delete')) {
+    const id = Number(message.content.split(/\s+/)[1]);
+
+    if (!id) {
+      return message.reply('Utilise !delete <id>.');
+    }
+
+    const games = loadGames();
+    const remainingGames = games.filter(game => game.id !== id);
+
+    if (remainingGames.length === games.length) {
+      return message.reply(`Aucun jeu avec l'ID ${id}.`);
+    }
+
+    saveGames(remainingGames);
+    return message.reply(`🗑️ Jeu #${id} supprimé.`);
+  }
+
   // Liste des jeux
   if (message.content === '!list') {
 
@@ -153,16 +184,26 @@ client.on('messageCreate', async (message) => {
       return message.reply('Aucun jeu.');
     }
 
-    let txt = games
-      .map(g => {
-        const status = g.earlyAccess
-          ? ' — 🟡 Early Access'
-          : g.released
-            ? ' — ✅ Sorti'
-            : '';
-        return `• ${g.name} — 📅 ${g?.releaseDate}${status}`;
-      })
-      .join('\n');
+    const releasedGames = games.filter(game => game.released && !game.earlyAccess);
+    const earlyAccessGames = games.filter(game => game.earlyAccess);
+    const pendingGames = games.filter(game => !game.released);
+
+    const sections = [
+      { title: '✅ Jeux sortis', games: releasedGames },
+      { title: '🟡 Jeux en early access', games: earlyAccessGames },
+      { title: '⏳ Jeux pas encore sortis', games: pendingGames }
+    ];
+
+    let txt = '🎲 Idée jeux\n\n';
+    txt += '🗑️ Utilise "!delete <id>" pour retirer un jeu de la liste.\n\n';
+
+    txt += sections.map(section => {
+      const content = section.games.length > 0
+        ? section.games.map(game => `• #${game.id} ${game.name} — 📅 ${game?.releaseDate}`).join('\n')
+        : '• Aucun jeu.';
+
+      return `${section.title}\n${content}`;
+    }).join('\n\n');
 
     message.reply(txt);
   }
@@ -185,9 +226,7 @@ cron.schedule('0 * * * *', async () => {
     for (let i = 0; i < games.length; i++) {
       try {
         const result = await updateGame(games[i], channel);
-        if (!result.removeFromList) {
-          updatedGames.push(result.game);
-        }
+        updatedGames.push(result.game);
       } catch (err) {
         console.error(
           `Erreur jeu ${games[i].appId}`,
