@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const cron = require('node-cron');
 const { shouldNotifyFinalRelease } = require('./gameState');
@@ -18,7 +19,24 @@ const client = new Client({
   ]
 });
 
-const FILE = './src/games.json';
+const DATA_DIR = '/src/data';
+const DATA_FILE = process.env.DATA_FILE || path.join(DATA_DIR, 'data.json');
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(DATA_FILE)) {
+  const initialDataFile = path.join(__dirname, 'data.json');
+
+  if (fs.existsSync(initialDataFile)) {
+    fs.copyFileSync(initialDataFile, DATA_FILE);
+    console.log(`Fichier de données copié depuis ${initialDataFile} vers ${DATA_FILE}`);
+  } else {
+    fs.writeFileSync(DATA_FILE, "[]");
+    console.log(`Aucun fichier de données initial trouvé. Création d'un nouveau fichier vide à ${DATA_FILE}`);
+  }
+}
 
 function normalizeGames(games) {
   const normalizedGames = Array.isArray(games) ? games : [];
@@ -32,12 +50,17 @@ function normalizeGames(games) {
 }
 
 function loadGames() {
-  const games = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  const games = JSON.parse(
+    fs.readFileSync(DATA_FILE, 'utf8')
+  );
   return normalizeGames(games);
 }
 
 function saveGames(games) {
-  fs.writeFileSync(FILE, JSON.stringify(games, null, 2));
+  fs.writeFileSync(
+    DATA_FILE,
+    JSON.stringify(games, null, 2)
+  );
 }
 
 function getAppId(url) {
