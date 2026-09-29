@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const cron = require('node-cron');
-const { shouldNotifyFinalRelease } = require('./gameState');
+const { shouldNotifyFinalRelease, groupGames } = require('./gameState');
 
 const {
   Client,
@@ -208,9 +208,7 @@ client.on('messageCreate', async (message) => {
       return message.reply('Aucun jeu.');
     }
 
-    const releasedGames = games.filter(game => game.released && !game.earlyAccess);
-    const earlyAccessGames = games.filter(game => game.earlyAccess);
-    const pendingGames = games.filter(game => !game.released);
+    const { releasedGames, earlyAccessGames, pendingGames } = groupGames(games);
 
     const sections = [
       { title: '✅ Jeux sortis', games: releasedGames },

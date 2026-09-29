@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldNotifyFinalRelease } = require('../src/gameState');
+const { shouldNotifyFinalRelease, groupGames } = require('../src/gameState');
 
 test('does not notify when a game is already marked as released', () => {
   assert.equal(
@@ -21,4 +21,12 @@ test('does not notify for a pending game', () => {
     shouldNotifyFinalRelease({ released: false, earlyAccess: true }, true, false),
     false
   );
+});
+
+test('keeps unreleased early access games only in the pending section', () => {
+  const game = { released: false, earlyAccess: true };
+  const sections = groupGames([game]);
+
+  assert.deepEqual(sections.earlyAccessGames, []);
+  assert.deepEqual(sections.pendingGames, [game]);
 });
